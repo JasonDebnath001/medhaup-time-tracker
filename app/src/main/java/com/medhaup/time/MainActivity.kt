@@ -20,20 +20,66 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.medhaup.time.ui.theme.*
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             TimeTheme {
-                LoginScreen()
+                Root()
             }
         }
+    }
+}
+
+@Composable
+fun Root() {
+    // Reactive session state — persists across app restarts
+    // (supabase-kt stores the session on-device by default).
+    val sessionStatus by supabase.auth.sessionStatus.collectAsState()
+
+    when (sessionStatus) {
+        is SessionStatus.Initializing -> {
+            // Shown briefly while the saved session is being restored.
+            // Mirrors the system splash (navy + logo) for a seamless handoff.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Brush.verticalGradient(listOf(NavyBlue, NavyBlueDark))),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Image(
+                        painter = painterResource(id = R.drawable.logo),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .padding(horizontal = 48.dp)
+                            .fillMaxWidth()
+                            .heightIn(max = 120.dp)
+                    )
+                    Spacer(Modifier.height(24.dp))
+                    CircularProgressIndicator(
+                        color = PureWhite.copy(alpha = 0.7f),
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+            }
+        }
+
+        is SessionStatus.Authenticated -> {
+            CheckInScreen(onSignedOut = { /* sessionStatus flips automatically */ })
+        }
+
+        else -> LoginScreen() // NotAuthenticated or RefreshFailure
     }
 }
 
@@ -45,15 +91,6 @@ fun LoginScreen() {
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val scope = rememberCoroutineScope()
-    var loggedIn by remember { mutableStateOf(false) }
-
-    if (loggedIn) {
-        // Temporary success screen — replaced by the check-in screen next step
-        Box(Modifier.fillMaxSize().background(OffWhite), contentAlignment = Alignment.Center) {
-            Text("✅ Signed in!", fontSize = 24.sp, color = TextPrimary)
-        }
-        return
-    }
 
     Box(
         modifier = Modifier
@@ -76,7 +113,10 @@ fun LoginScreen() {
             Image(
                 painter = painterResource(id = R.drawable.logo),
                 contentDescription = "Company logo",
-                modifier = Modifier.size(96.dp)
+                modifier = Modifier
+                    .padding(horizontal = 48.dp)
+                    .fillMaxWidth()
+                    .heightIn(max = 80.dp)
             )
             Spacer(modifier = Modifier.height(16.dp))
             Text(
@@ -169,7 +209,8 @@ fun LoginScreen() {
                                         this.email = email
                                         this.password = password
                                     }
-                                    loggedIn = true
+                                    // No manual navigation needed:
+                                    // Root() reacts to sessionStatus becoming Authenticated.
                                 } catch (e: Exception) {
                                     errorMessage = e.message ?: "Login failed"
                                 } finally {
