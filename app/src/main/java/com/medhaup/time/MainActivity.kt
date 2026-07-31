@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.medhaup.time.ui.theme.*
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.auth.providers.builtin.Email
+import io.github.jan.supabase.auth.status.SessionStatus
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -31,9 +32,34 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             TimeTheme {
-                LoginScreen()
+                Root()
             }
         }
+    }
+}
+
+@Composable
+fun Root() {
+    // Reactive session state — persists across app restarts
+    val sessionStatus by supabase.auth.sessionStatus.collectAsState()
+
+    when (sessionStatus) {
+        is SessionStatus.Initializing -> {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(Brush.verticalGradient(listOf(NavyBlue, NavyBlueDark))),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = PureWhite)
+            }
+        }
+
+        is SessionStatus.Authenticated -> {
+            CheckInScreen(onSignedOut = { /* handled by sessionStatus */ })
+        }
+
+        else -> LoginScreen()
     }
 }
 
@@ -45,15 +71,6 @@ fun LoginScreen() {
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
     val scope = rememberCoroutineScope()
-    var loggedIn by remember { mutableStateOf(false) }
-
-    if (loggedIn) {
-        // Temporary success screen — replaced by the check-in screen next step
-        Box(Modifier.fillMaxSize().background(OffWhite), contentAlignment = Alignment.Center) {
-            Text("✅ Signed in!", fontSize = 24.sp, color = TextPrimary)
-        }
-        return
-    }
 
     Box(
         modifier = Modifier
@@ -72,7 +89,6 @@ fun LoginScreen() {
         ) {
             Spacer(modifier = Modifier.weight(1f))
 
-            // Logo + app name
             Image(
                 painter = painterResource(id = R.drawable.logo),
                 contentDescription = "Company logo",
@@ -93,7 +109,6 @@ fun LoginScreen() {
 
             Spacer(modifier = Modifier.height(40.dp))
 
-            // Floating white login card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -169,7 +184,6 @@ fun LoginScreen() {
                                         this.email = email
                                         this.password = password
                                     }
-                                    loggedIn = true
                                 } catch (e: Exception) {
                                     errorMessage = e.message ?: "Login failed"
                                 } finally {
